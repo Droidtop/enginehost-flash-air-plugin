@@ -26,8 +26,7 @@ jobs:
           mkdir -p enginehost-android/app/src/main/assets/ruffle .ci
           curl --fail --location --retry 5 --output .ci/ruffle.zip https://github.com/ruffle-rs/ruffle/releases/download/v0.4.1/ruffle-0.4.1-web-selfhosted.zip
           unzip -q .ci/ruffle.zip -d enginehost-android/app/src/main/assets/ruffle
-          cp LICENSE_MIT enginehost-android/app/src/main/assets/ruffle/LICENSE_MIT
-          cp LICENSE_APACHE enginehost-android/app/src/main/assets/ruffle/LICENSE_APACHE
+          cp LICENSE.md enginehost-android/app/src/main/assets/ruffle/LICENSE.md
           test -f enginehost-android/app/src/main/assets/ruffle/ruffle.js
           test -n "$(find enginehost-android/app/src/main/assets/ruffle -name '*.wasm' -print -quit)"
       - name: Build plugin APK
@@ -38,7 +37,7 @@ jobs:
           test -f "$APK"
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump xmltree "$APK" AndroidManifest.xml | grep -q dev.enginehost.plugin.RUN
           unzip -l "$APK" | grep -q assets/ruffle/ruffle.js
-          unzip -l "$APK" | grep -q assets/ruffle/LICENSE_MIT
+          unzip -l "$APK" | grep -q assets/ruffle/LICENSE.md
       - uses: actions/upload-artifact@v4
         with:
           name: enginehost-flash-air-debug-apk
