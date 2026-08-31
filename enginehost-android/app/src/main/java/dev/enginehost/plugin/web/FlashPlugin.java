@@ -80,7 +80,11 @@ public final class FlashPlugin implements EnginePlugin {
                 xml = new String(bytes, 0, Math.max(0, count), java.nio.charset.StandardCharsets.UTF_8);
             }
             java.util.regex.Matcher match = java.util.regex.Pattern.compile("<content>\\s*([^<]+)\\s*</content>").matcher(xml);
-            if (match.find()) return confinedGameFile(match.group(1).trim());
+            if (match.find()) {
+                // AIR descriptors are commonly authored on Windows even when
+                // the unpacked game is later hosted on Android.
+                return confinedGameFile(match.group(1).trim().replace('\\', '/'));
+            }
         }
         File[] files = gameRoot.listFiles((dir, name) -> name.toLowerCase(java.util.Locale.ROOT).endsWith(".swf"));
         if (files != null && files.length == 1) return files[0].getCanonicalFile();
