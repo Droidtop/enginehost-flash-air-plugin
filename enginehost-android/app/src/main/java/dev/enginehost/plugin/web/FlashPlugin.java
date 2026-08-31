@@ -118,9 +118,29 @@ public final class FlashPlugin implements EnginePlugin {
     private final class ConfinedClient extends WebViewClient {
         @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) { return !allowed(request.getUrl()); }
         @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-            return allowed(request.getUrl()) ? super.shouldInterceptRequest(view, request) :
-                new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
+            Uri uri = request.getUrl();
+            if (!allowed(uri)) return new WebResourceResponse(
+                "text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
+            if (!"file".equals(uri.getScheme())) return super.shouldInterceptRequest(view, request);
+            try {
+                File file = new File(uri.getPath() == null ? "" : uri.getPath()).getCanonicalFile();
+                if (!file.isFile()) return new WebResourceResponse(
+                    "text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
+                return new WebResourceResponse(mime(file.getName()), null, new FileInputStream(file));
+            } catch (IOException error) {
+                session.host().log(android.util.Log.ERROR, "flash-air", "Could not serve " + uri, error);
+                return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
+            }
         }
+    }
+
+    private String mime(String name) {
+        String lower = name.toLowerCase(java.util.Locale.ROOT);
+        if (lower.endsWith(".js")) return "application/javascript";
+        if (lower.endsWith(".wasm")) return "application/wasm";
+        if (lower.endsWith(".swf") || lower.endsWith(".padding")) return "application/x-shockwave-flash";
+        if (lower.endsWith(".json") || lower.endsWith(".map")) return "application/json";
+        return "application/octet-stream";
     }
 
     @Override public boolean onControllerEvent(EngineControllerEvent event) {
