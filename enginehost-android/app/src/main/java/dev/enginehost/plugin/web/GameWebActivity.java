@@ -43,7 +43,7 @@ abstract class GameWebActivity extends Activity {
         webView = new WebView(this);
         WebSettings settings = webView.getSettings();
         JSONObject options;
-        try { options = new JSONObject(getIntent().getStringExtra("options") == null ? "{}" : getIntent().getStringExtra("options")); }
+        try { options = new JSONObject(getIntent().getStringExtra("dev.enginehost.runtime.OPTIONS") == null ? "{}" : getIntent().getStringExtra("dev.enginehost.runtime.OPTIONS")); }
         catch (JSONException error) { fail("options must be valid JSON"); return; }
         allowNetwork = options.optBoolean("allowNetwork", false);
         settings.setJavaScriptEnabled(options.optBoolean("javaScript", true));
