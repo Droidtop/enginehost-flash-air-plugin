@@ -20,6 +20,22 @@
       "supportedRanges": [{"min": "1.0", "max": "32.0"}]
     }
   ],
+  "declaredOptions": [
+    {
+      "key": "allowNetwork",
+      "label": "Allow network access",
+      "type": "boolean",
+      "repeats": false,
+      "description": "Lets the movie load http and https resources; off keeps it entirely offline (FlashPlugin.java:43)."
+    },
+    {
+      "key": "mediaPlaybackRequiresGesture",
+      "label": "Require a tap before audio",
+      "type": "boolean",
+      "repeats": false,
+      "description": "When on, audio and video only start after the player touches the screen (FlashPlugin.java:53)."
+    }
+  ],
   "source": {
     "upstream": "https://github.com/ruffle-rs/ruffle",
     "revision": "v0.4.1"
