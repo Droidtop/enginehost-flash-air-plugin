@@ -1,0 +1,44 @@
+{
+  "bundleId": "dev.enginehost.flashair.ruffle041.v1",
+  "engine": "flash_air",
+  "pluginVersion": "1.0.0",
+  "apiVersion": 1,
+  "entrypoint": "dev.enginehost.plugin.web.FlashPlugin",
+  "origin": "https://github.com/droidtop/enginehost-flash-air-plugin",
+  "dexFiles": ["classes.dex"],
+  "capabilities": [
+    {
+      "id": "ruffle-0.4.1-swf-experimental",
+      "engineContext": "swf",
+      "runtimeVersion": "32.0",
+      "supportedRanges": [{"min": "1.0", "max": "32.0"}]
+    },
+    {
+      "id": "ruffle-0.4.1-air-experimental",
+      "engineContext": "air",
+      "runtimeVersion": "32.0",
+      "supportedRanges": [{"min": "1.0", "max": "32.0"}]
+    }
+  ],
+  "declaredOptions": [
+    {
+      "key": "allowNetwork",
+      "label": "Allow network access",
+      "type": "boolean",
+      "repeats": false,
+      "description": "Lets the movie load http and https resources; off keeps it entirely offline (FlashPlugin.java:43)."
+    },
+    {
+      "key": "mediaPlaybackRequiresGesture",
+      "label": "Require a tap before audio",
+      "type": "boolean",
+      "repeats": false,
+      "description": "When on, audio and video only start after the player touches the screen (FlashPlugin.java:53)."
+    }
+  ],
+  "source": {
+    "upstream": "https://github.com/ruffle-rs/ruffle",
+    "revision": "v0.4.1"
+  },
+  "licenses": ["MIT", "Apache-2.0"]
+}

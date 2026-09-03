@@ -1,0 +1,13 @@
+{
+  "algorithm": "SHA256withECDSA",
+  "formatVersion": 1,
+  "issuer": {
+    "algorithm": "SHA256withECDSA",
+    "id": "enginehost-official-v1",
+    "keySha256": "E01B8F3DB54F70F3AC5390EC63158F754FEF1E3716BDCB8DF45E20315651A803",
+    "signature": "MEUCIQCBYeYkwz1xC9IiveIBxkmdPMmuBTwBTB1Qgn3L0a1PBgIgNSo0zBWP0Zk1aE5DesAOOnZrpifi1lLQr2KkDaxf8qY="
+  },
+  "keySha256": "59021DC2A708D47D4F2F3383BFB5C3BAF27250C7A5770D6A3547BB15D878E68A",
+  "origin": "https://github.com/droidtop/enginehost-flash-air-plugin",
+  "publicKeySpki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE8HI6rTEC9kHrCFwUsI9MG6gPPe8zR1dnR1/HMRrKei8IubFkeqMgS9KDjQKl04P9MGjmAToSywrr642kCs+2Cg=="
+}
