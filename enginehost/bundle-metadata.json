@@ -1,0 +1,48 @@
+{
+  "bundleId": "dev.enginehost.flashair.ruffle041.v1",
+  "engine": "flash_air",
+  "pluginVersion": "0.1",
+  "apiVersion": 1,
+  "entrypoint": "dev.enginehost.plugin.flash.FlashPlugin",
+  "origin": "https://github.com/droidtop/enginehost-flash-air-plugin",
+  "dexFiles": [
+    "classes.dex"
+  ],
+  "capabilities": [
+    {
+      "id": "ruffle-0.4.1-swf",
+      "engineContext": "swf",
+      "runtimeVersion": "0.4.1",
+      "acceptsAnyEngineVersion": true
+    },
+    {
+      "id": "ruffle-0.4.1-air",
+      "engineContext": "air",
+      "runtimeVersion": "0.4.1",
+      "acceptsAnyEngineVersion": true
+    }
+  ],
+  "declaredOptions": [
+    {
+      "key": "allowNetwork",
+      "label": "Allow network access",
+      "type": "boolean",
+      "repeats": false,
+      "description": "Lets the content load http and https resources; off keeps it entirely offline."
+    },
+    {
+      "key": "webContentsDebugging",
+      "label": "Web contents debugging",
+      "type": "boolean",
+      "repeats": false,
+      "description": "Exposes the player page to Chrome's remote debugger, for diagnosing content that will not start."
+    }
+  ],
+  "source": {
+    "upstream": "https://github.com/ruffle-rs/ruffle",
+    "revision": "v0.4.1"
+  },
+  "licenses": [
+    "Ruffle: MIT OR Apache-2.0, redistributed as built by the Ruffle project; this wrapper: MIT; games are not redistributed"
+  ]
+}

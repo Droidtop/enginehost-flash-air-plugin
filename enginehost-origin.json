@@ -1,0 +1,15 @@
+{
+  "description": "Plays Flash (SWF) and Adobe AIR content with Ruffle, confined to the game folder, with saves kept on disk",
+  "engine": "flash_air",
+  "engineContexts": [
+    "swf",
+    "air"
+  ],
+  "formatVersion": 1,
+  "implementation": {
+    "id": "ruffle",
+    "name": "Ruffle",
+    "upstream": "https://github.com/ruffle-rs/ruffle"
+  },
+  "origin": "https://github.com/droidtop/enginehost-flash-air-plugin"
+}

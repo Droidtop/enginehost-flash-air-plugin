@@ -1,17 +1,7 @@
 {
   "schemaVersion": 1,
   "capabilities": [
-    {
-      "id": "ruffle-0.4.1-swf-experimental",
-      "engineContext": "swf",
-      "runtimeVersion": "32.0",
-      "supportedRanges": [{ "min": "1.0", "max": "32.0" }]
-    },
-    {
-      "id": "ruffle-0.4.1-air-experimental",
-      "engineContext": "air",
-      "runtimeVersion": "32.0",
-      "supportedRanges": [{ "min": "1.0", "max": "32.0" }]
-    }
+    { "id": "ruffle-0.4.1-swf", "engineContext": "swf", "runtimeVersion": "0.4.1", "acceptsAnyEngineVersion": true },
+    { "id": "ruffle-0.4.1-air", "engineContext": "air", "runtimeVersion": "0.4.1", "acceptsAnyEngineVersion": true }
   ]
 }
