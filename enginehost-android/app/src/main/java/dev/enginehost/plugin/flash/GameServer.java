@@ -58,12 +58,20 @@ final class GameServer {
     private final File bundleRoot;
     private final boolean allowNetwork;
     private final File swf;
+    /**
+     * Whether this is an AIR application rather than a plain SWF. Ruffle
+     * only defines the AIR classes (NativeApplication, NativeWindow, File)
+     * when told it is emulating AIR; a game that reaches for them under the
+     * Flash Player profile fails at its first frame.
+     */
+    private final boolean air;
 
     GameServer(File gameRoot, File bundleRoot, String execFile, JSONObject options) throws IOException {
         this.gameRoot = gameRoot;
         this.bundleRoot = bundleRoot;
         this.allowNetwork = options.optBoolean("allowNetwork", false);
         this.swf = resolveSwf(execFile);
+        this.air = new File(gameRoot, "META-INF/AIR/application.xml").isFile();
     }
 
     /** The page that hosts Ruffle; the SWF is loaded from the game origin. */
@@ -136,7 +144,8 @@ final class GameServer {
             + "<script>window.RufflePlayer=window.RufflePlayer||{};"
             + "window.RufflePlayer.config={publicPath:\"" + RUNTIME_PREFIX + "ruffle/\",autoplay:\"on\","
             + "unmuteOverlay:\"hidden\",letterbox:\"on\",splashScreen:false,contextMenu:\"off\","
-            + "warnOnUnsupportedContent:false,scale:\"showAll\",allowScriptAccess:true};"
+            + "warnOnUnsupportedContent:false,scale:\"showAll\",allowScriptAccess:true,"
+            + "playerRuntime:\"" + (air ? "air" : "flashPlayer") + "\"};"
             + "window.addEventListener(\"load\",function(){var player=window.RufflePlayer.newest().createPlayer();"
             + "document.body.appendChild(player);player.load({url:" + swfUrl + "});});</script></body></html>";
     }
