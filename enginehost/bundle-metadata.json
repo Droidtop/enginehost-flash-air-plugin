@@ -1,23 +1,35 @@
 {
   "bundleId": "dev.enginehost.flashair.ruffle041.v1",
   "engine": "flash_air",
-  "pluginVersion": "1.0.0",
+  "pluginVersion": "0.1",
   "apiVersion": 1,
   "entrypoint": "dev.enginehost.plugin.web.FlashPlugin",
   "origin": "https://github.com/droidtop/enginehost-flash-air-plugin",
-  "dexFiles": ["classes.dex"],
+  "dexFiles": [
+    "classes.dex"
+  ],
   "capabilities": [
     {
       "id": "ruffle-0.4.1-swf-experimental",
       "engineContext": "swf",
       "runtimeVersion": "32.0",
-      "supportedRanges": [{"min": "1.0", "max": "32.0"}]
+      "supportedRanges": [
+        {
+          "min": "1.0",
+          "max": "32.0"
+        }
+      ]
     },
     {
       "id": "ruffle-0.4.1-air-experimental",
       "engineContext": "air",
       "runtimeVersion": "32.0",
-      "supportedRanges": [{"min": "1.0", "max": "32.0"}]
+      "supportedRanges": [
+        {
+          "min": "1.0",
+          "max": "32.0"
+        }
+      ]
     }
   ],
   "declaredOptions": [
@@ -40,5 +52,8 @@
     "upstream": "https://github.com/ruffle-rs/ruffle",
     "revision": "v0.4.1"
   },
-  "licenses": ["MIT", "Apache-2.0"]
+  "licenses": [
+    "MIT",
+    "Apache-2.0"
+  ]
 }
