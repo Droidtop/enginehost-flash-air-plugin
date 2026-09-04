@@ -56,22 +56,47 @@ jobs:
           gradle-version: "8.13"
       - name: Build the runtime library
         run: gradle -p enginehost-android :app:assembleRelease --no-daemon --stacktrace
+      # Ruffle itself is built from this repository, not fetched prebuilt: this
+      # branch carries fixes to Ruffle's AIR emulation that upstream's release
+      # does not have, and a bundle that fetched upstream would silently drop
+      # them. The recipe mirrors Ruffle's own web workflow.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "enginehost-web"
+      - name: Install wasm-bindgen
+        run: cargo install --locked wasm-bindgen-cli --version 0.2.120
+      - name: Install wasm-opt
+        uses: sigoden/install-binary@v1
+        with:
+          repo: WebAssembly/binaryen
+          tag: version_129
+          name: wasm-opt
+      - name: Build Ruffle's self-hosted web player from this tree
+        working-directory: web
+        run: |
+          npm ci
+          npm run build --workspace=ruffle-core
+          npm run build --workspace=ruffle-selfhosted
+          test -f packages/selfhosted/dist/ruffle.js
       - name: Build signed Enginehost bundle
         env:
           ENGINEHOST_SIGNING_KEY_PEM: ${{ secrets.ENGINEHOST_SIGNING_KEY_PEM }}
-          RUFFLE_RELEASE: v0.4.1
         run: |
           test -n "$ENGINEHOST_SIGNING_KEY_PEM"
           mkdir -p build/payload build/output
           unzip -p enginehost-android/app/build/outputs/aar/app-release.aar classes.jar > build/classes.jar
           "$ANDROID_HOME/build-tools/36.0.0/d8" --release --min-api 26 --output build/payload build/classes.jar
           cp LICENSE.md build/payload/LICENSE.md
-          # Ruffle's self-hosted web player, as the Ruffle project builds it. It is
+          # Ruffle's self-hosted web player, built above from this tree. It is
           # served to the page from inside the bundle; nothing is fetched at play time.
-          mkdir -p build/payload/ruffle .ci
-          curl --fail --location --retry 5 --output .ci/ruffle.zip \
-            "https://github.com/ruffle-rs/ruffle/releases/download/${RUFFLE_RELEASE}/ruffle-${RUFFLE_RELEASE#v}-web-selfhosted.zip"
-          unzip -q .ci/ruffle.zip -d build/payload/ruffle
+          mkdir -p build/payload/ruffle
+          cp -r web/packages/selfhosted/dist/. build/payload/ruffle/
           test -f build/payload/ruffle/ruffle.js
           test -n "$(find build/payload/ruffle -name '*.wasm' -print -quit)"
           printf '%s' "$ENGINEHOST_SIGNING_KEY_PEM" > build/signing-key.pem
