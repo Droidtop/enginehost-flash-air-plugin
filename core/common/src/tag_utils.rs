@@ -282,6 +282,14 @@ impl SwfMovie {
         &self.url
     }
 
+    /// Places the movie in a sandbox other than the one inferred from its
+    /// URL. An AIR application's main movie runs in the application sandbox
+    /// whatever URL it was fetched from; that is decided by the runtime that
+    /// hosts it, not by the file's location.
+    pub fn set_sandbox_type(&mut self, sandbox_type: SandboxType) {
+        self.sandbox_type = sandbox_type;
+    }
+
     pub fn set_url(&mut self, url: String) {
         self.url = url;
     }

@@ -968,6 +968,12 @@ pub fn load_root_movie<'gc>(
         on_metadata(movie.header());
         movie.append_parameters(parameters);
         player.lock().unwrap().mutate_with_update_context(|uc| {
+            // An AIR application's main movie runs in the application
+            // sandbox regardless of where it was fetched from; AIR content
+            // checks Security.sandboxType and refuses anything else.
+            if uc.avm2.player_runtime == crate::player::PlayerRuntime::AIR {
+                movie.set_sandbox_type(ruffle_common::sandbox::SandboxType::Application);
+            }
             uc.set_root_movie(movie);
         });
         Ok(())

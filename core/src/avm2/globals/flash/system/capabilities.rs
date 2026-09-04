@@ -58,13 +58,13 @@ pub fn get_player_type<'gc>(
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     // TODO: When should "External" be returned?
-    let player_type = if cfg!(target_family = "wasm") {
-        "PlugIn"
-    } else {
-        match activation.context.avm2.player_runtime {
-            PlayerRuntime::FlashPlayer => "StandAlone",
-            PlayerRuntime::AIR => "Desktop",
-        }
+    // An AIR application is "Desktop" wherever it runs: AIR content that
+    // checks this refuses to start under any other answer, and the web build
+    // hosting it is an implementation detail, not a browser plugin.
+    let player_type = match activation.context.avm2.player_runtime {
+        PlayerRuntime::AIR => "Desktop",
+        PlayerRuntime::FlashPlayer if cfg!(target_family = "wasm") => "PlugIn",
+        PlayerRuntime::FlashPlayer => "StandAlone",
     };
 
     Ok(AvmString::new_utf8(activation.gc(), player_type).into())
