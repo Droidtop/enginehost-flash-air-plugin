@@ -1,4 +1,5 @@
 package dev.enginehost.api;
+
 public final class EngineControllerEvent {
     public String action() { throw new UnsupportedOperationException(); }
     public float value() { throw new UnsupportedOperationException(); }

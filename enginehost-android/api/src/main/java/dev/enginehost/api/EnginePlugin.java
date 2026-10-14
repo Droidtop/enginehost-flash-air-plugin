@@ -1,4 +1,5 @@
 package dev.enginehost.api;
+
 public interface EnginePlugin {
     void onCreate(EnginePluginSession session) throws Exception;
     default boolean onControllerEvent(EngineControllerEvent event) throws Exception { return false; }

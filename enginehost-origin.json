@@ -1,9 +1,9 @@
 {
-  "description": "Enginehost plugin implementation repository for Ruffle",
+  "description": "Plays Flash (SWF) and Adobe AIR content with Ruffle, confined to the game folder, with saves kept on disk",
   "engine": "flash_air",
   "engineContexts": [
-    "air",
-    "swf"
+    "swf",
+    "air"
   ],
   "formatVersion": 1,
   "implementation": {

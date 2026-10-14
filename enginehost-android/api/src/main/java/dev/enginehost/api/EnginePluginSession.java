@@ -1,7 +1,9 @@
 package dev.enginehost.api;
+
 import android.view.ViewGroup;
 import java.io.File;
 import java.util.Map;
+
 public final class EnginePluginSession {
     public File bundleDirectory() { throw new UnsupportedOperationException(); }
     public ViewGroup display() { throw new UnsupportedOperationException(); }

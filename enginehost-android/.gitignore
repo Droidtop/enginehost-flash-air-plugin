@@ -1,5 +1,6 @@
 /.gradle/
 /.ci/
 /app/build/
-/app/src/main/assets/ruffle/
+/api/build/
+/build/
 /local.properties

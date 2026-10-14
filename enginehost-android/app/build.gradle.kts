@@ -1,7 +1,7 @@
 plugins { id("com.android.library") }
 
 android {
-    namespace = "dev.enginehost.plugin.web"
+    namespace = "dev.enginehost.plugin.flash"
     compileSdk = 36
     defaultConfig {
         minSdk = 26
@@ -12,4 +12,6 @@ android {
     }
 }
 
-dependencies { compileOnly(project(":api")) }
+dependencies {
+    compileOnly(project(":api"))
+}
