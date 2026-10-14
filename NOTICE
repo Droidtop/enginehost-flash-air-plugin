@@ -1,0 +1,10 @@
+Flash/AIR (Ruffle) plugin for Enginehost
+Enginehost wrapper and integration code: Copyright the Enginehost contributors, GNU General Public
+License, version 3 (LICENSE).
+
+Upstream: Ruffle (https://github.com/ruffle-rs/ruffle), MIT OR Apache-2.0 at the licensee's option.
+Both Ruffle licences allow GPL-3.0 (Apache-2.0 is one-way compatible with GPL-3.0, MIT is compatible).
+Upstream's own licence and notice files stay in the tree unchanged: LICENSE.md, web/LICENSE.md, swf/LICENSE-MIT, swf/LICENSE-APACHE.
+The combined work is distributed under GPL-3.0 (owner rule, 2026-10-14: a codebase that can be
+GPL-3.0 must be). Every upstream copyright and licence notice in the source files stays as it is.
+The MIT addendum that used to sit at the bottom of LICENSE.md is gone; LICENSE.md is Ruffle's file again.
