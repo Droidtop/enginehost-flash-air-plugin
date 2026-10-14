@@ -1,0 +1,9 @@
+{
+  "upstream": {
+    "repo": "ruffle-rs/ruffle",
+    "ref": "engine/ruffle-0.4.1",
+    "commit": "879485957abb5de610b106daada5f2380b8fe936",
+    "basedOn": "ruffle-rs/ruffle a1ac4ce8647352ad03044031cad0454a636427b8 (v0.4.1)"
+  },
+  "version": "0.4.1"
+}
