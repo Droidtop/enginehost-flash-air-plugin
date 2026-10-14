@@ -94,6 +94,7 @@ jobs:
           unzip -p enginehost-android/app/build/outputs/aar/app-release.aar classes.jar > build/classes.jar
           "$ANDROID_HOME/build-tools/36.0.0/d8" --release --min-api 26 --output build/unsigned/payload build/classes.jar
           cp LICENSE.md build/unsigned/payload/LICENSE.md
+          cp LICENSE build/unsigned/payload/LICENSE.enginehost.txt
           # Ruffle's self-hosted web player, built above from this tree. It is
           # served to the page from inside the bundle; nothing is fetched at play time.
           mkdir -p build/unsigned/payload/ruffle

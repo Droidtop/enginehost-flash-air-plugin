@@ -43,6 +43,6 @@
     "revision": "v0.4.1"
   },
   "licenses": [
-    "Ruffle: MIT OR Apache-2.0, redistributed as built by the Ruffle project; this wrapper: MIT; games are not redistributed"
+    "Ruffle: MIT OR Apache-2.0, redistributed as built by the Ruffle project; this wrapper and the combined bundle: GPL-3.0 (permitted by both Ruffle licences); games are not redistributed"
   ]
 }
