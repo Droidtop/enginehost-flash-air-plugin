@@ -1,7 +1,0 @@
-{
-  "schemaVersion": 1,
-  "capabilities": [
-    { "id": "ruffle-0.4.1-swf", "engineContext": "swf", "runtimeVersion": "0.4.1", "acceptsAnyEngineVersion": true },
-    { "id": "ruffle-0.4.1-air", "engineContext": "air", "runtimeVersion": "0.4.1", "acceptsAnyEngineVersion": true }
-  ]
-}
