@@ -1,7 +1,8 @@
 {
   "bundleId": "dev.enginehost.flashair.ruffle041.v1",
   "engine": "flash_air",
-  "pluginVersion": "1.0.4",
+  "pluginVersion": "1.0.5",
+  "lockdown": true,
   "apiVersion": 1,
   "entrypoint": "dev.enginehost.plugin.flash.FlashPlugin",
   "origin": "https://github.com/droidtop/enginehost-flash-air-plugin",
