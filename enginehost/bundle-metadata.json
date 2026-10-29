@@ -1,7 +1,7 @@
 {
   "bundleId": "dev.enginehost.flashair.ruffle041.v1",
   "engine": "flash_air",
-  "pluginVersion": "1.0.5",
+  "pluginVersion": "1.0.6",
   "lockdown": true,
   "apiVersion": 1,
   "entrypoint": "dev.enginehost.plugin.flash.FlashPlugin",
