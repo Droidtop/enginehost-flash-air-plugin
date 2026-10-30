@@ -1,6 +1,5 @@
 use crate::buffer_pool::BufferDescription;
 use crate::descriptors::Descriptors;
-use crate::globals::Globals;
 use std::borrow::Cow;
 use wgpu::util::DeviceExt;
 use wgpu::{CommandEncoder, TextureFormat};
@@ -196,14 +195,11 @@ pub fn supported_sample_count(
     sample_count
 }
 
-#[expect(clippy::too_many_arguments)]
 pub fn run_copy_pipeline(
     descriptors: &Descriptors,
     format: wgpu::TextureFormat,
     frame_view: &wgpu::TextureView,
     input: &wgpu::TextureView,
-    whole_frame_bind_group: &wgpu::BindGroup,
-    globals: &Globals,
     sample_count: u32,
     encoder: &mut CommandEncoder,
 ) {
@@ -247,18 +243,9 @@ pub fn run_copy_pipeline(
     });
 
     render_pass.set_pipeline(&pipeline);
-    render_pass.set_bind_group(0, globals.bind_group(), &[]);
-
-    render_pass.set_bind_group(1, whole_frame_bind_group, &[0]);
     render_pass.set_bind_group(2, &copy_bind_group, &[]);
 
-    render_pass.set_vertex_buffer(0, descriptors.quad.vertices_pos_uv.slice(..));
-    render_pass.set_index_buffer(
-        descriptors.quad.indices.slice(..),
-        wgpu::IndexFormat::Uint32,
-    );
-
-    render_pass.draw_indexed(0..6, 0, 0..1);
+    render_pass.draw(0..3, 0..1);
     drop(render_pass);
 }
 

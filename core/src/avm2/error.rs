@@ -301,12 +301,6 @@ pub fn make_error_1003<'gc>(activation: &mut Activation<'_, 'gc>, radix: i32) ->
 
 #[inline(never)]
 #[cold]
-pub fn make_error_1005<'gc>(activation: &mut Activation<'_, 'gc>, length: f64) -> Error<'gc> {
-    make_error!(range_error(activation, error_message!(1005, length), 1005))
-}
-
-#[inline(never)]
-#[cold]
 pub fn make_error_1006<'gc>(activation: &mut Activation<'_, 'gc>) -> Error<'gc> {
     make_error!(type_error(activation, error_message!(1006, "value"), 1006))
 }
@@ -1106,6 +1100,7 @@ pub fn make_error_2085<'gc>(activation: &mut Activation<'_, 'gc>, param_name: &s
     ))
 }
 
+make_error_fn!(make_error_2094, 2094, error);
 make_error_fn!(make_error_2097, 2097, argument_error);
 make_error_fn!(make_error_2099, 2099, error);
 
@@ -1129,8 +1124,9 @@ make_error_fn!(make_error_2130, 2130, error);
 #[inline(never)]
 #[cold]
 pub fn make_error_2136<'gc>(activation: &mut Activation<'_, 'gc>) -> Error<'gc> {
-    // TODO: Add proper argument.
-    make_error!(error(activation, error_message!(2136, ""), 2136))
+    let movie = activation.caller_movie_or_root();
+    let url = movie.url();
+    make_error!(error(activation, error_message!(2136, url), 2136))
 }
 
 make_error_fn!(make_error_2150, 2150, argument_error);
@@ -1187,6 +1183,7 @@ pub fn make_error_2187<'gc>(
 make_error_fn!(make_error_3669, 3669, error);
 make_error_fn!(make_error_3670, 3670, argument_error);
 make_error_fn!(make_error_3671, 3671, argument_error);
+make_error_fn!(make_error_3692, 3692, error);
 
 // This isn't used if the `jpegxr` feature is disabled, see
 // `globals::flash::display3D::textures::atf_jpegxr`

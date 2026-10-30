@@ -24,7 +24,6 @@ use ruffle_macros::istr;
 use ruffle_render::filters::Filter;
 use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::collections::BTreeMap;
-use std::sync::Arc;
 use swf::ButtonActionCondition;
 
 #[derive(Clone, Collect, Copy)]
@@ -45,7 +44,7 @@ impl fmt::Debug for Avm1Button<'_> {
 pub struct Avm1ButtonData<'gc> {
     base: InteractiveObjectBase<'gc>,
     cell: RefLock<Avm1ButtonDataMut<'gc>>,
-    shared: Gc<'gc, ButtonShared>,
+    shared: Gc<'gc, ButtonShared<'gc>>,
     object: Lock<Option<Object<'gc>>>,
     state: Cell<ButtonState>,
     tracking: Cell<ButtonTracking>,
@@ -63,12 +62,17 @@ struct Avm1ButtonDataMut<'gc> {
 }
 
 impl<'gc> Avm1Button<'gc> {
-    pub fn from_swf_tag(button: &swf::Button, source_movie: &SwfSlice, mc: &Mutation<'gc>) -> Self {
+    pub fn from_swf_tag(
+        button: &swf::Button,
+        movie: SwfMovie<'gc>,
+        swf_data: &SwfSlice,
+        mc: &Mutation<'gc>,
+    ) -> Self {
         let actions = button
             .actions
             .iter()
             .map(|action| ButtonAction {
-                action_data: source_movie.to_subslice(action.action_data),
+                action_data: swf_data.to_subslice(action.action_data),
                 conditions: action.conditions,
             })
             .collect();
@@ -78,7 +82,7 @@ impl<'gc> Avm1Button<'gc> {
             Avm1ButtonData {
                 base: Default::default(),
                 cell: RefLock::new(Avm1ButtonDataMut {
-                    container: ChildContainer::new(&source_movie.movie),
+                    container: ChildContainer::new(&movie),
                     hit_area: BTreeMap::new(),
                     hit_bounds: Default::default(),
                     text_field_bindings: Vec::new(),
@@ -86,7 +90,7 @@ impl<'gc> Avm1Button<'gc> {
                 shared: Gc::new(
                     mc,
                     ButtonShared {
-                        swf: source_movie.movie.clone(),
+                        swf: movie,
                         id: button.id,
                         actions,
                         cell: RefCell::new(ButtonSharedMut {
@@ -164,7 +168,7 @@ impl<'gc> Avm1Button<'gc> {
                     _ => {
                         if let Some(child) = context
                             .library
-                            .library_for_movie_mut(movie.clone())
+                            .library_for_movie_mut(movie)
                             .instantiate_by_id(record.id, context.gc_context)
                         {
                             // New child that did not previously exist, create it.
@@ -257,7 +261,7 @@ impl<'gc> TDisplayObject<'gc> for Avm1Button<'gc> {
         self.0.shared.id
     }
 
-    fn movie(self) -> Arc<SwfMovie> {
+    fn movie(self) -> SwfMovie<'gc> {
         self.0.movie()
     }
 
@@ -274,7 +278,7 @@ impl<'gc> TDisplayObject<'gc> for Avm1Button<'gc> {
             let id = ActivationIdentifier::root("[Construct]");
             let mut activation = Activation::from_nothing(context, id, self.into());
             let constr = activation.resolve_class([istr!("Button")]);
-            let proto = constr.and_then(|c| c.prototype(&mut activation));
+            let proto = constr.and_then(|c| c.prototype(&activation));
             let native = NativeObject::Button(self);
             let object = Object::new_with_native(activation.strings(), proto, native);
 
@@ -622,8 +626,8 @@ impl<'gc> Avm1ButtonData<'gc> {
         handled
     }
 
-    fn movie(&self) -> Arc<SwfMovie> {
-        self.shared.swf.clone()
+    fn movie(&self) -> SwfMovie<'gc> {
+        self.shared.swf
     }
 }
 
@@ -659,11 +663,15 @@ pub enum ButtonTracking {
 
 /// Data shared between all instances of a button.
 #[derive(Collect, Debug)]
-#[collect(require_static)]
-struct ButtonShared {
-    swf: Arc<SwfMovie>,
+#[collect(no_drop)]
+struct ButtonShared<'gc> {
+    swf: SwfMovie<'gc>,
     id: CharacterId,
+
+    #[collect(require_static)]
     actions: Vec<ButtonAction>,
+
+    #[collect(require_static)]
     cell: RefCell<ButtonSharedMut>,
 }
 

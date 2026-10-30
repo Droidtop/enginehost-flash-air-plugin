@@ -7,6 +7,7 @@ use crate::avm2::error::{
     make_error_1115,
 };
 use crate::avm2::function::{FunctionArgs, exec};
+use crate::avm2::index::ArrayIndex;
 use crate::avm2::object::{NamespaceObject, Object, TObject};
 use crate::avm2::property::Property;
 use crate::avm2::script::TranslationUnit;
@@ -147,23 +148,6 @@ impl From<u32> for Value<'_> {
             Value::Integer(value)
         } else {
             Value::Number(value as f64)
-        }
-    }
-}
-
-impl PartialEq for Value<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Value::Undefined, Value::Undefined) => true,
-            (Value::Null, Value::Null) => true,
-            (Value::Bool(a), Value::Bool(b)) => a == b,
-            (Value::Number(a), Value::Number(b)) => a == b,
-            (Value::Number(a), Value::Integer(b)) => *a == *b as f64,
-            (Value::Integer(a), Value::Number(b)) => *a as f64 == *b,
-            (Value::Integer(a), Value::Integer(b)) => a == b,
-            (Value::String(a), Value::String(b)) => a == b,
-            (Value::Object(a), Value::Object(b)) => Object::ptr_eq(*a, *b),
-            _ => false,
         }
     }
 }
@@ -658,15 +642,12 @@ impl<'gc> Value<'gc> {
 
     // If the current value represents an index (a unsigned integer less than u32::MAX),
     // then return that value. Returns None otherwise.
-    pub fn try_as_index(&self) -> Option<usize> {
-        Some(match self {
-            value @ Value::Integer(num) if value.is_u32() => *num as usize,
-            value @ Value::Number(num) if value.is_u32() && *num < u32::MAX as f64 => {
-                assert!(num.is_finite());
-                *num as usize
-            }
-            _ => return None,
-        })
+    pub fn try_as_index(&self) -> Option<ArrayIndex> {
+        match self {
+            Value::Integer(num) => ArrayIndex::from_i32(*num),
+            Value::Number(num) => ArrayIndex::from_f64(*num),
+            _ => None,
+        }
     }
 
     /// Yields `true` if the given value is an unboxed primitive value.
@@ -1792,16 +1773,28 @@ impl<'gc> Value<'gc> {
 
     /// Implements the strict-equality `===` check for AVM2.
     pub fn strict_eq(&self, other: &Value<'gc>) -> bool {
-        if self == other {
-            true
-        } else {
-            // TODO - this should apply to (Array/Vector).indexOf, and possibility more places as well
-            if let Some(xml1) = self.as_object().and_then(|obj| obj.as_xml_object())
-                && let Some(xml2) = other.as_object().and_then(|obj| obj.as_xml_object())
-            {
-                return E4XNode::ptr_eq(xml1.node(), xml2.node());
+        match (self, other) {
+            (Value::Undefined, Value::Undefined) => true,
+            (Value::Null, Value::Null) => true,
+            (Value::Bool(a), Value::Bool(b)) => a == b,
+            (Value::Number(a), Value::Number(b)) => a == b,
+            (Value::Number(a), Value::Integer(b)) => *a == *b as f64,
+            (Value::Integer(a), Value::Number(b)) => *a as f64 == *b,
+            (Value::Integer(a), Value::Integer(b)) => a == b,
+            (Value::String(a), Value::String(b)) => a == b,
+            (Value::Object(a), Value::Object(b)) => {
+                let self_xml = self.as_object().and_then(|obj| obj.as_xml_object());
+                let other_xml = other.as_object().and_then(|obj| obj.as_xml_object());
+
+                // Two `XML` objects are considered equal if they point to the
+                // same node.
+                if let (Some(self_xml), Some(other_xml)) = (self_xml, other_xml) {
+                    E4XNode::ptr_eq(self_xml.node(), other_xml.node())
+                } else {
+                    Object::ptr_eq(*a, *b)
+                }
             }
-            false
+            _ => false,
         }
     }
 

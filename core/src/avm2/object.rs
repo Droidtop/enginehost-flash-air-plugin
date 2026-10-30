@@ -11,6 +11,7 @@ use crate::avm2::domain::Domain;
 use crate::avm2::error::{self, make_error_2012};
 use crate::avm2::events::{DispatchList, Event};
 use crate::avm2::function::FunctionArgs;
+use crate::avm2::index::ArrayIndex;
 use crate::avm2::property::Property;
 use crate::avm2::regexp::RegExp;
 use crate::avm2::value::{Hint, Value};
@@ -31,6 +32,7 @@ mod array_object;
 mod bitmapdata_object;
 mod bytearray_object;
 mod class_object;
+mod collator_object;
 mod content_element_object;
 mod context3d_object;
 mod date_object;
@@ -87,6 +89,9 @@ pub use crate::avm2::object::bytearray_object::{
     ByteArrayObject, ByteArrayObjectWeak, byte_array_allocator,
 };
 pub use crate::avm2::object::class_object::{ClassObject, ClassObjectWeak};
+pub use crate::avm2::object::collator_object::{
+    CollatorObject, CollatorObjectWeak, CollatorOptions, LastOperationStatus, collator_allocator,
+};
 pub use crate::avm2::object::content_element_object::{
     ContentElementObject, ContentElementObjectWeak, ElementData, content_element_allocator,
 };
@@ -250,6 +255,7 @@ use crate::font::Font;
         MessageChannelObject(MessageChannelObject<'gc>),
         SecurityDomainObject(SecurityDomainObject<'gc>),
         Matrix3DObject(Matrix3DObject<'gc>),
+        CollatorObject(CollatorObject<'gc>),
     }
 )]
 pub trait TObject<'gc>: 'gc + Collect<'gc> + Debug + Into<Object<'gc>> + Clone + Copy {
@@ -298,7 +304,7 @@ pub trait TObject<'gc>: 'gc + Collect<'gc> + Debug + Into<Object<'gc>> + Clone +
 
     /// Purely an optimization for "array-like" access. This should return
     /// `None` when the lookup needs to be forwarded to the base or throw.
-    fn get_index_property(self, _index: usize) -> Option<Value<'gc>> {
+    fn get_index_property(self, _index: ArrayIndex) -> Option<Value<'gc>> {
         None
     }
 
@@ -351,7 +357,7 @@ pub trait TObject<'gc>: 'gc + Collect<'gc> + Debug + Into<Object<'gc>> + Clone +
     fn set_index_property(
         self,
         _activation: &mut Activation<'_, 'gc>,
-        _index: usize,
+        _index: ArrayIndex,
         _value: Value<'gc>,
     ) -> Option<Result<(), Error<'gc>>> {
         None
@@ -816,6 +822,7 @@ impl<'gc> Object<'gc> {
         pub fn as_sound_transform for SoundTransformObject;
         pub fn as_style_sheet for StyleSheetObject;
         pub fn as_matrix3d_object for Matrix3DObject;
+        pub fn as_collator for CollatorObject;
     }
 
     /// Unwrap this object's `Namespace`, if the object is a boxed namespace.
@@ -1025,6 +1032,7 @@ define_weak_enum! {
         MessageChannelObject(MessageChannelObjectWeak<'gc>),
         SecurityDomainObject(SecurityDomainObjectWeak<'gc>),
         Matrix3DObject(Matrix3DObjectWeak<'gc>),
+        CollatorObject(CollatorObjectWeak<'gc>),
     }
 }
 

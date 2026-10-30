@@ -31,8 +31,6 @@ Event listener called
 1200
 18
 18
-12
-3
 hardlight
 null
 0.5
@@ -47,7 +45,7 @@ null
 false
 true
 16711680
-0
+30
 line#2
 [object Test]
 [object Stage]

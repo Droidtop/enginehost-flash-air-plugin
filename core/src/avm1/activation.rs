@@ -8,7 +8,8 @@ use crate::avm1::{ArrayBuilder, Object, Value, fscommand, globals, scope};
 use crate::backend::navigator::{NavigationMethod, Request};
 use crate::context::UpdateContext;
 use crate::display_object::{
-    DisplayObject, DisplayObjectContainer, MovieClip, TDisplayObject, TDisplayObjectContainer,
+    DisplayObject, DisplayObjectContainer, GotoInfo, MovieClip, StopOrPlay, TDisplayObject,
+    TDisplayObjectContainer,
 };
 use crate::ecma_conversions::{f64_to_wrapping_i32, f64_to_wrapping_u32};
 use crate::loader::MovieLoaderVMData;
@@ -263,7 +264,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
 
     /// Resolve a class constructor on the global scope. This ignores the prototype chain, getters, and attributes.
     pub fn resolve_class(
-        &mut self,
+        &self,
         path: impl IntoIterator<Item = AvmString<'gc>>,
     ) -> Option<Object<'gc>> {
         let mut obj = self.global_object();
@@ -278,10 +279,35 @@ impl<'a, 'gc> Activation<'a, 'gc> {
 
     /// Resolve a class prototype on the global scope. This ignores the prototype chain, getters, and attributes.
     pub fn resolve_prototype(
-        &mut self,
+        &self,
         path: impl IntoIterator<Item = AvmString<'gc>>,
     ) -> Option<Value<'gc>> {
         self.resolve_class(path).and_then(|c| c.prototype(self))
+    }
+
+    /// Instiantiate the given class. This ignores the prototype chain, getters, and attributes.
+    pub fn instantiate_class_fast(
+        &mut self,
+        path: impl IntoIterator<Item = AvmString<'gc>>,
+        args: &[Value<'gc>],
+    ) -> Result<Option<Value<'gc>>, Error<'gc>> {
+        self.resolve_class(path)
+            .map(|c| c.construct(self, args))
+            .transpose()
+    }
+
+    /// Instiantiate the given class as if by AVM1 bytecode, taking into account the prototype chain, getters,
+    /// and attributes.
+    pub fn instantiate_class_as_script(
+        &mut self,
+        path: impl IntoIterator<Item = AvmString<'gc>>,
+        args: &[Value<'gc>],
+    ) -> Result<Value<'gc>, Error<'gc>> {
+        let mut obj = self.global_object();
+        for name in path {
+            obj = obj.get(name, self)?.coerce_to_object_or_bare(self)?;
+        }
+        obj.construct(self, args)
     }
 
     /// Was this activation created by a constructor call? Note that native calls don't
@@ -501,7 +527,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     }
 
     pub fn run_actions(&mut self, code: SwfSlice) -> Result<ReturnType<'gc>, Error<'gc>> {
-        let mut read = Reader::new(&code.movie.data()[code.start..], self.swf_version());
+        let mut read = Reader::new(&code.entire_data()[code.start..], self.swf_version());
 
         loop {
             let result = self.do_action(&code, &mut read);
@@ -1454,7 +1480,12 @@ impl<'a, 'gc> Activation<'a, 'gc> {
         if let Some(clip) = self.target_clip() {
             if let Some(clip) = clip.as_movie_clip() {
                 // The frame on the stack is 0-based, not 1-based.
-                clip.goto_frame(self.context, action.frame + 1, true);
+                let goto_info = GotoInfo {
+                    frame: action.frame + 1,
+                    stop_or_play: StopOrPlay::Stop,
+                };
+
+                clip.goto_frame(self.context, goto_info);
             } else {
                 avm_error!(self, "GotoFrame failed: Target is not a MovieClip");
             }
@@ -1469,11 +1500,18 @@ impl<'a, 'gc> Activation<'a, 'gc> {
         // Param can either be a frame number or a frame label.
         if let Some(clip) = self.target_clip_or_root().as_movie_clip() {
             let frame = self.context.avm1.pop();
+
+            let stop_or_play = if action.set_playing {
+                StopOrPlay::Play
+            } else {
+                StopOrPlay::Stop
+            };
+
             let _ = globals::movie_clip::goto_frame(
                 clip,
                 self,
                 &[frame],
-                !action.set_playing,
+                stop_or_play,
                 action.scene_offset,
             );
         } else {
@@ -1487,7 +1525,12 @@ impl<'a, 'gc> Activation<'a, 'gc> {
             if let Some(clip) = clip.as_movie_clip() {
                 let label = action.label.decode(self.encoding());
                 if let Some(frame) = clip.frame_label_to_number(&label, self.context) {
-                    clip.goto_frame(self.context, frame, true);
+                    let goto_info = GotoInfo {
+                        frame,
+                        stop_or_play: StopOrPlay::Stop,
+                    };
+
+                    clip.goto_frame(self.context, goto_info);
                 } else {
                     avm_warn!(self, "GoToLabel: Frame label '{:?}' not found", label);
                 }
@@ -1508,7 +1551,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     ) -> Result<FrameControl<'gc>, Error<'gc>> {
         let val = self.context.avm1.pop();
         if val.as_bool(self.swf_version()) {
-            reader.seek(data.movie.data(), action.offset);
+            reader.seek(data.entire_data(), action.offset);
         }
         Ok(FrameControl::Continue)
     }
@@ -1621,7 +1664,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
         reader: &mut Reader<'b>,
         data: &'b SwfSlice,
     ) -> Result<FrameControl<'gc>, Error<'gc>> {
-        reader.seek(data.movie.data(), action.offset);
+        reader.seek(data.entire_data(), action.offset);
         Ok(FrameControl::Continue)
     }
 

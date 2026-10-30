@@ -115,6 +115,7 @@ impl WgpuContext3D {
                 repeating_nearest: Default::default(),
                 clamped_linear: Default::default(),
                 clamped_nearest: Default::default(),
+                view: dummy_texture.create_view(&Default::default()),
                 texture: dummy_texture,
                 copy_count: Cell::new(0),
             }))
@@ -256,12 +257,12 @@ impl WgpuContext3D {
             depth_stencil_attachment,
             ..Default::default()
         });
-        pass.set_bind_group(0, self.bind_group.as_ref().unwrap(), &[]);
-        pass.set_pipeline(
-            self.compiled_pipeline
-                .as_ref()
-                .expect("Missing compiled pipeline"),
-        );
+        if let Some(bind_group) = self.bind_group.as_ref() {
+            pass.set_bind_group(0, bind_group, &[]);
+        }
+        if let Some(compiled_pipeline) = self.compiled_pipeline.as_ref() {
+            pass.set_pipeline(compiled_pipeline);
+        }
         if let Some(rect) = &self.scissor_rectangle {
             let current_size = self.current_texture_size.unwrap();
             if rect.x_min.to_pixels() < 0.0
@@ -352,6 +353,16 @@ impl Context3D for WgpuContext3D {
     }
     fn bitmap_handle(&self) -> BitmapHandle {
         self.front_buffer_raw_texture_handle.clone()
+    }
+    fn back_buffer_handle(&self) -> Option<BitmapHandle> {
+        self.back_buffer_size
+            .map(|_| self.back_buffer_raw_texture_handle.clone())
+    }
+    fn back_buffer_size(&self) -> Option<(u32, u32)> {
+        self.back_buffer_size.map(|size| (size.width, size.height))
+    }
+    fn buffers_cleared(&self) -> bool {
+        self.seen_clear_command
     }
     fn should_render(&self) -> bool {
         // If this is None, we haven't called configureBackBuffer yet.
@@ -646,6 +657,7 @@ impl Context3D for WgpuContext3D {
                     // which is what the Stage rendering code expects. In multisample mode,
                     // this is our resolve texture.
                     self.back_buffer_raw_texture_handle = BitmapHandle(Arc::new(Texture {
+                        view: self.back_buffer_resolve_texture_view.clone().unwrap(),
                         texture: back_buffer_resolve_texture.unwrap(),
                         repeating_linear: Default::default(),
                         repeating_nearest: Default::default(),
@@ -654,6 +666,7 @@ impl Context3D for WgpuContext3D {
                         copy_count: Cell::new(0),
                     }));
                     self.front_buffer_raw_texture_handle = BitmapHandle(Arc::new(Texture {
+                        view: self.front_buffer_resolve_texture_view.clone().unwrap(),
                         texture: front_buffer_resolve_texture.unwrap(),
                         repeating_linear: Default::default(),
                         repeating_nearest: Default::default(),
@@ -666,6 +679,7 @@ impl Context3D for WgpuContext3D {
                     // so our main texture gets used as the raw texture handle.
 
                     self.back_buffer_raw_texture_handle = BitmapHandle(Arc::new(Texture {
+                        view: self.back_buffer_texture_view.clone().unwrap(),
                         texture: back_buffer_texture,
                         repeating_linear: Default::default(),
                         repeating_nearest: Default::default(),
@@ -674,6 +688,7 @@ impl Context3D for WgpuContext3D {
                         copy_count: Cell::new(0),
                     }));
                     self.front_buffer_raw_texture_handle = BitmapHandle(Arc::new(Texture {
+                        view: self.front_buffer_texture_view.clone().unwrap(),
                         texture: front_buffer_texture,
                         repeating_linear: Default::default(),
                         repeating_nearest: Default::default(),
@@ -687,6 +702,9 @@ impl Context3D for WgpuContext3D {
                 self.current_pipeline
                     .update_has_depth_texture(depth_and_stencil);
                 self.current_pipeline.update_sample_count(sample_count);
+
+                // The new buffers have to be cleared before they're used.
+                self.seen_clear_command = false;
             }
             Context3DCommand::UploadToIndexBuffer {
                 buffer,
@@ -859,9 +877,25 @@ impl Context3D for WgpuContext3D {
                 let indices =
                     (first_index as u32)..((first_index as u32) + (num_triangles as u32 * 3));
 
-                let new_pipeline = self
-                    .current_pipeline
-                    .rebuild_pipeline(&self.descriptors, &self.vertex_attributes);
+                let (can_draw, new_pipeline) =
+                    if self.current_pipeline.has_unbound_required_textures() {
+                        (false, None)
+                    } else {
+                        match self
+                            .current_pipeline
+                            .rebuild_pipeline(&self.descriptors, &self.vertex_attributes)
+                        {
+                            Ok(new_pipeline) => (true, new_pipeline),
+                            // Flash skips the draw when the vertex shader reads
+                            // an attribute that has no vertex buffer bound.
+                            // TODO throw Error #3611 when Context3D.enableErrorChecking is set
+                            Err(naga_agal::Error::MissingVertexAttributeData) => (false, None),
+                            Err(e) => {
+                                tracing::error!("Failed to compile AGAL shaders: {e:?}");
+                                (false, None)
+                            }
+                        }
+                    };
 
                 if !self.seen_clear_command {
                     tracing::warn!(
@@ -896,7 +930,10 @@ impl Context3D for WgpuContext3D {
 
                 render_pass
                     .set_index_buffer(index_buffer.buffer.slice(..), wgpu::IndexFormat::Uint16);
-                render_pass.draw_indexed(indices, 0, 0..1);
+
+                if can_draw {
+                    render_pass.draw_indexed(indices, 0, 0..1);
+                }
 
                 // A `RenderPass` needs to hold references to several fields in `self`, so we can't
                 // easily re-use it across multiple `DrawTriangles` calls.

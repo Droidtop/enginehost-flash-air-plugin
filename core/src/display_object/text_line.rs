@@ -20,7 +20,6 @@ use gc_arena::lock::Lock;
 use gc_arena::{Collect, Gc, Mutation};
 use ruffle_common::utils::HasPrefixField;
 use std::cell::Cell;
-use std::sync::Arc;
 use swf::Twips;
 
 #[derive(Clone, Collect, Copy)]
@@ -42,8 +41,7 @@ pub struct TextLineData<'gc> {
     base: InteractiveObjectBase<'gc>,
     avm2_object: Lock<Option<Avm2StageObject<'gc>>>,
     fallback: EditText<'gc>,
-    #[collect(require_static)]
-    movie: Arc<SwfMovie>,
+    movie: SwfMovie<'gc>,
 
     validity: Lock<TextLineValidity<'gc>>,
 
@@ -65,7 +63,7 @@ pub struct TextLineData<'gc> {
 impl<'gc> TextLine<'gc> {
     pub fn new(
         context: &mut UpdateContext<'gc>,
-        movie: Arc<SwfMovie>,
+        movie: SwfMovie<'gc>,
         fallback: EditText<'gc>,
     ) -> Self {
         TextLine(Gc::new(
@@ -152,6 +150,21 @@ impl<'gc> TextLine<'gc> {
 
     pub fn measure_text(self, context: &mut UpdateContext<'gc>) -> (Twips, Twips) {
         self.0.fallback.measure_text(context)
+    }
+
+    pub fn has_tabs(self) -> bool {
+        self.0.fallback.text().contains(b'\t')
+    }
+
+    /// Returns the laid-out line's `(ascent, descent)`.
+    pub fn metrics(self) -> (f64, f64) {
+        let layout = self.0.fallback.layout();
+        let Some(line) = layout.lines().first() else {
+            debug_assert!(false, "Should not be reachable");
+            return Default::default();
+        };
+
+        (line.ascent().to_pixels(), line.descent().to_pixels())
     }
 
     pub fn fallback(self) -> EditText<'gc> {
@@ -270,8 +283,8 @@ impl<'gc> TDisplayObject<'gc> for TextLine<'gc> {
         0
     }
 
-    fn movie(self) -> Arc<SwfMovie> {
-        self.0.movie.clone()
+    fn movie(self) -> SwfMovie<'gc> {
+        self.0.movie
     }
 
     fn replace_with(self, _context: &mut UpdateContext<'gc>, _id: CharacterId) {}

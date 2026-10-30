@@ -1,6 +1,6 @@
 use crate::avm1::function::ExecutionReason;
-use crate::avm1::globals::as_broadcaster::BroadcasterFunctions;
-use crate::avm1::globals::{as_broadcaster, create_globals};
+use crate::avm1::globals::create_globals;
+use crate::avm1::globals::object::broadcast_internal;
 use crate::avm1::object::stage_object;
 use crate::avm1::property_map::PropertyMap;
 use crate::avm1::scope::Scope;
@@ -32,9 +32,6 @@ struct GlobalEnv<'gc> {
     /// System built-ins that we use internally to construct new objects.
     prototypes: avm1::globals::SystemPrototypes<'gc>,
 
-    /// Cached functions for the AsBroadcaster.
-    broadcaster_functions: BroadcasterFunctions<'gc>,
-
     /// The mappings between symbol names and constructors registered
     /// with `Object.registerClass()`. This is either case-sensitive or case-insensitive.
     constructor_registry: PropertyMap<'gc, Object<'gc>>,
@@ -42,11 +39,10 @@ struct GlobalEnv<'gc> {
 
 impl<'gc> GlobalEnv<'gc> {
     fn create(context: &mut StringContext<'gc>) -> Self {
-        let (prototypes, globals, broadcaster_functions) = create_globals(context);
+        let (prototypes, globals) = create_globals(context);
         Self {
             global_scope: Gc::new(context.gc(), Scope::from_global_object(globals)),
             prototypes,
-            broadcaster_functions,
             constructor_registry: PropertyMap::new(),
         }
     }
@@ -189,9 +185,8 @@ impl<'gc> Avm1<'gc> {
         }
 
         let constant_pool = context.avm1.constant_pool;
-        // Let's do this once for swf 6 (case sensitive) and once for swf 7 (case insensitive),
-        // as we keep separate _global objects around for those two cases.
-        for swf_version in [6, 7] {
+        // Initialize the playerglobal SWF in both case-sensitive and case-insensitive environments.
+        for swf_version in [6, 8] {
             let mut child_activation = Activation::from_action(
                 context,
                 ActivationIdentifier::root("playerglobal"),
@@ -329,8 +324,7 @@ impl<'gc> Avm1<'gc> {
             .unwrap();
 
         let has_listener =
-            as_broadcaster::broadcast_internal(broadcaster, args, method, &mut activation)
-                .unwrap_or(false);
+            broadcast_internal(broadcaster, args, method, &mut activation).unwrap_or(false);
         drop(activation);
 
         if &broadcaster_name == b"Mouse" {
@@ -437,14 +431,6 @@ impl<'gc> Avm1<'gc> {
 
     pub fn set_max_recursion_depth(&mut self, max_recursion_depth: u16) {
         self.max_recursion_depth = max_recursion_depth
-    }
-
-    pub fn broadcaster_functions(&self, swf_version: u8) -> BroadcasterFunctions<'gc> {
-        if Self::is_case_sensitive(swf_version) {
-            self.env_case_sensitive.broadcaster_functions
-        } else {
-            self.env_case_insensitive.broadcaster_functions
-        }
     }
 
     /// The Flash Player version we're emulating.

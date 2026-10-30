@@ -15,7 +15,7 @@ use ruffle_core::backend::ui::{
     FullscreenError, LanguageIdentifier, MouseCursor, MultiDialogResultFuture,
     MultiFileDialogResult, UiBackend,
 };
-use ruffle_core::font::{FontFileData, FontQuery};
+use ruffle_core::font::{FontAtlases, FontFileData, FontQuery};
 use std::fs::File;
 use std::path::Path;
 use std::rc::Rc;
@@ -162,6 +162,10 @@ pub struct DesktopUiBackend {
     // It's non-trivial to invalidate all fonts and change the renderer, so
     // do not allow changing it in runtime.
     device_font_renderer: DeviceFontRenderer,
+
+    // Shared atlas pages that every device font loaded by this backend packs
+    // its glyphs into, instead of each font getting its own.
+    font_atlases: FontAtlases,
 }
 
 impl DesktopUiBackend {
@@ -187,6 +191,7 @@ impl DesktopUiBackend {
                 .device_font_renderer()
                 .unwrap_or(DeviceFontRenderer::Embedded),
             preferences,
+            font_atlases: FontAtlases::new(),
         })
     }
 
@@ -317,24 +322,44 @@ impl UiBackend for DesktopUiBackend {
         let name = &query.name;
         let is_bold = query.is_bold;
         let is_italic = query.is_italic;
+        let lowercase_name = query.lowercase_name.as_str();
 
-        let query = fontdb::Query {
-            families: &[Family::Name(name)],
-            weight: if is_bold {
-                fontdb::Weight::BOLD
-            } else {
-                fontdb::Weight::NORMAL
-            },
-            style: if is_italic {
-                fontdb::Style::Italic
-            } else {
-                fontdb::Style::Normal
-            },
-            ..Default::default()
+        let weight = if is_bold {
+            fontdb::Weight::BOLD
+        } else {
+            fontdb::Weight::NORMAL
+        };
+        let style = if is_italic {
+            fontdb::Style::Italic
+        } else {
+            fontdb::Style::Normal
         };
 
+        // fontdb's `query` is case-sensitive; resolve the canonical family name
+        // case-insensitively (first match) and re-query so fontdb still selects
+        // weight/style. Always resolving case-insensitively avoids order-dependent
+        // picks when case-duplicate fonts are installed.
+        let canonical = self.font_database.faces().find_map(|face| {
+            face.families
+                .iter()
+                .find(|(fam, _)| fam.to_lowercase() == lowercase_name)
+                .map(|(fam, _)| fam.clone())
+        });
+        let id = canonical.and_then(|canon| {
+            if canon.as_str() != name.as_str() {
+                tracing::info!("Device font \"{name}\" matched case-insensitively to \"{canon}\"");
+            }
+            let query = fontdb::Query {
+                families: &[Family::Name(&canon)],
+                weight,
+                style,
+                ..Default::default()
+            };
+            self.font_database.query(&query)
+        });
+
         // It'd be nice if we can get the full list of candidates... Feature request?
-        if let Some(id) = self.font_database.query(&query)
+        if let Some(id) = id
             && let Some(face) = self.font_database.face(id)
         {
             tracing::info!(
@@ -342,7 +367,12 @@ impl UiBackend for DesktopUiBackend {
                 face.post_script_name
             );
 
-            match load_fontdb_font(name.to_string(), face, self.device_font_renderer) {
+            match load_fontdb_font(
+                name.to_string(),
+                face,
+                self.device_font_renderer,
+                &self.font_atlases,
+            ) {
                 Ok(font_definition) => register(font_definition),
                 Err(error) => tracing::error!("Error loading font from fontdb: {error}"),
             }
@@ -357,7 +387,7 @@ impl UiBackend for DesktopUiBackend {
     ) -> Vec<FontQuery> {
         cfg_select! {
             all(unix, feature = "fontconfig") => {
-                fontconfig::sort_device_fonts(query, register, self.device_font_renderer)
+                fontconfig::sort_device_fonts(query, register, self.device_font_renderer, &self.font_atlases)
                     .inspect_err(|err| tracing::error!("Cannot sort device fonts: {err}"))
                     .unwrap_or_default()
             }
@@ -437,6 +467,7 @@ fn load_font_from_file(
     is_bold: bool,
     is_italic: bool,
     device_font_renderer: DeviceFontRenderer,
+    #[allow(unused_variables)] atlases: &FontAtlases,
 ) -> Result<FontDefinition<'static>> {
     match device_font_renderer {
         #[cfg(all(target_os = "linux", feature = "freetype"))]
@@ -447,7 +478,7 @@ fn load_font_from_file(
                 name,
                 is_bold,
                 is_italic,
-                font_renderer: Box::new(FreetypeFontRenderer::new(path, index)?),
+                font_renderer: Box::new(FreetypeFontRenderer::new(path, index, atlases)?),
             })
         }
         _ => {
@@ -479,6 +510,7 @@ fn load_fontdb_font(
     name: String,
     face: &FaceInfo,
     device_font_renderer: DeviceFontRenderer,
+    atlases: &FontAtlases,
 ) -> Result<FontDefinition<'static>> {
     let is_bold = face.weight > fontdb::Weight::NORMAL;
     let is_italic = face.style != fontdb::Style::Normal;
@@ -491,6 +523,7 @@ fn load_fontdb_font(
             is_bold,
             is_italic,
             device_font_renderer,
+            atlases,
         ),
 
         fontdb::Source::Binary(bin) | fontdb::Source::SharedFile(_, bin) => {
@@ -509,7 +542,7 @@ fn load_fontdb_font(
 mod fontconfig {
     use crate::backends::ui::{DeviceFontRenderer, load_font_from_file};
     use ruffle_core::backend::ui::FontDefinition;
-    use ruffle_core::font::FontQuery;
+    use ruffle_core::font::{FontAtlases, FontQuery};
     use std::path::Path;
 
     #[derive(Debug, thiserror::Error)]
@@ -524,6 +557,7 @@ mod fontconfig {
         query: &FontQuery,
         register: &mut dyn FnMut(FontDefinition),
         device_font_renderer: DeviceFontRenderer,
+        atlases: &FontAtlases,
     ) -> Result<Vec<FontQuery>, FontconfigError> {
         use fontconfig::{FontFormat, Pattern};
         use std::sync::LazyLock;
@@ -597,6 +631,7 @@ mod fontconfig {
                 is_bold,
                 is_italic,
                 device_font_renderer,
+                atlases,
             ) {
                 Ok(definition) => register(definition),
                 Err(err) => {

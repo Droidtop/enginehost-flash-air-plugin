@@ -7,14 +7,22 @@ struct VertexOutput {
     @location(0) uv: vec2<f32>,
 };
 
-@group(1) @binding(0) var<uniform> transforms: common__Transforms;
 @group(2) @binding(0) var texture: texture_2d<f32>;
 @group(2) @binding(1) var texture_sampler: sampler;
 
 @vertex
-fn main_vertex(in: common__VertexInputUv) -> VertexOutput {
-    let pos = common__globals.view_matrix * transforms.world_matrix * vec4<f32>(in.position.x, in.position.y, 0.0, 1.0);
-    return VertexOutput(pos, in.uv.xy / in.uv.z);
+fn main_vertex(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
+    // Fullscreen triangle :) This is called with 3 (empty) vertices, and we generate a triangle covering the entire screen
+	let uv = vec2<f32>(
+        f32((vertex_index << 1u) & 2u),
+        f32(vertex_index & 2u)
+    );
+    let pos = vec4<f32>(
+        uv * vec2<f32>(2.0, -2.0) + vec2<f32>(-1.0, 1.0),
+        0.0,
+        1.0
+    );
+    return VertexOutput(pos, uv);
 }
 
 @fragment

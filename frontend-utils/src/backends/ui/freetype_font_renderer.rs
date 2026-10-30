@@ -1,6 +1,7 @@
 use freetype::bitmap::PixelMode;
 use freetype::face::KerningMode;
 use freetype::face::LoadFlag;
+use ruffle_core::font::FontAtlases;
 use std::ffi::OsStr;
 use thiserror::Error;
 
@@ -20,9 +21,18 @@ pub enum Error {
     FreetypeError(#[from] freetype::Error),
 }
 
-#[derive(Debug)]
 pub struct FreetypeFontRenderer {
     face: freetype::Face,
+    atlases: FontAtlases,
+}
+
+impl std::fmt::Debug for FreetypeFontRenderer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FreetypeFontRenderer")
+            .field("family_name", &self.face.family_name())
+            .field("style_name", &self.face.style_name())
+            .finish()
+    }
 }
 
 impl FreetypeFontRenderer {
@@ -32,14 +42,17 @@ impl FreetypeFontRenderer {
     /// Divide each pixel into 20 (use twips precision). It affects metrics.
     const SCALE: f64 = 20.0;
 
-    pub fn new<P>(path: P, face_index: u32) -> Result<Self, Error>
+    pub fn new<P>(path: P, face_index: u32, atlases: &FontAtlases) -> Result<Self, Error>
     where
         P: AsRef<OsStr>,
     {
         let ft = freetype::Library::init()?;
         let face = ft.new_face(path, face_index as isize)?;
         face.set_char_size((Self::SIZE_PX * 64.0) as isize, 0, 0, 0)?;
-        Ok(Self { face })
+        Ok(Self {
+            face,
+            atlases: atlases.clone(),
+        })
     }
 
     fn size_metrics(&self) -> freetype::ffi::FT_Size_Metrics {
@@ -70,6 +83,13 @@ impl FreetypeFontRenderer {
         let glyph = self.face.glyph();
         let bitmap = glyph.bitmap();
         let advance = convert_26_6_to_twips(glyph.advance().x);
+
+        // Glyphs with no ink (e.g. space) have an empty bitmap. Skip the
+        // atlas entirely for these.
+        if bitmap.width() == 0 || bitmap.rows() == 0 {
+            return Ok(Glyph::whitespace(character, advance));
+        }
+
         let tx = Twips::from_pixels(glyph.bitmap_left() as f64);
 
         // `bitmap_top` is the distance from the baseline up to the top of
@@ -79,16 +99,15 @@ impl FreetypeFontRenderer {
         let bitmap_top = Twips::from_pixels(glyph.bitmap_top() as f64);
         let ty = self.ascent() - bitmap_top;
 
-        // Glyphs with no ink (e.g. space) have an empty bitmap, but a
-        // zero-sized texture isn't allowed, so clamp to at least 1x1.
         let bitmap = Bitmap::new(
-            (bitmap.width() as u32).max(1),
-            (bitmap.rows() as u32).max(1),
+            bitmap.width() as u32,
+            bitmap.rows() as u32,
             BitmapFormat::Rgba,
             convert_bitmap(&bitmap)?,
         );
+        let atlas_glyph = self.atlases.rgba().new_glyph(bitmap, tx, ty);
 
-        Ok(Glyph::from_bitmap(character, bitmap, advance, tx, ty))
+        Ok(Glyph::from_atlas(character, atlas_glyph, advance))
     }
 
     fn calculate_kerning_internal(&self, left: char, right: char) -> Result<Twips, Error> {
@@ -142,11 +161,19 @@ impl FontRenderer for FreetypeFontRenderer {
             .map_err(|err| tracing::error!("Failed to calculate kerning: {err:?}"))
             .unwrap_or(Twips::ZERO)
     }
+
+    fn atlases(&self) -> Option<&FontAtlases> {
+        Some(&self.atlases)
+    }
 }
 
 /// Converts a FreeType 26.6 fixed-point value (1/64th of a pixel) to Twips
 /// (1/20th of a pixel), rounding to the nearest twip.
-fn convert_26_6_to_twips(value_26_6: i64) -> Twips {
+///
+/// Note: the FreeType type differs between 64-bit and 32-bit architectures,
+/// hence the `Into<i64>`.
+fn convert_26_6_to_twips(value_26_6: impl Into<i64>) -> Twips {
+    let value_26_6 = value_26_6.into();
     let whole_pixels = (value_26_6 / 64) as i32;
 
     let fractional_twips = (value_26_6 % 64) as f64 / 64.0 * 20.0;
