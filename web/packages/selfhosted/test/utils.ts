@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import { Player, Setup } from "ruffle-core";
+import type { ChainablePromiseElement } from "webdriverio";
 
 declare global {
     interface Window {
@@ -196,8 +197,56 @@ export async function openTest(
     browser: WebdriverIO.Browser,
     directory: string,
     filename: string = "index.html",
-) {
-    await browser.url(`http://localhost:4567/test/${directory}/${filename}`);
+): Promise<WebdriverIO.BrowsingContext> {
+    return await browser.url(
+        `http://localhost:4567/test/${directory}/${filename}`,
+    );
+}
+
+/**
+ * Returns the browsing context of the frame on `page` matching `selector`.
+ *
+ * WebDriver Classic sessions (e.g. Safari on BrowserStack) have no separate
+ * browsing context per frame, so there the whole session is switched into the
+ * frame instead, and `page` is returned standing for it. Use `getTopDocument`
+ * to get back to the top-level document in a way that works for both.
+ */
+export async function getFrame(
+    browser: WebdriverIO.Browser,
+    page: WebdriverIO.BrowsingContext,
+    selector: string,
+): Promise<WebdriverIO.BrowsingContext> {
+    if (browser.isBidi) {
+        return await page.frame({ selector });
+    }
+    await browser.switchFrame(null);
+    await browser.switchFrame(await browser.$(selector));
+    return page;
+}
+
+/**
+ * Returns the inner HTML of `element`, without its shadow DOM.
+ *
+ * This is used instead of `getHTML({ pierceShadowRoot: false })`, which in
+ * WebdriverIO 10 always runs in the top-level document, so it fails for
+ * elements inside a frame.
+ */
+export async function getInnerHTML(
+    element: ChainablePromiseElement,
+): Promise<string> {
+    const resolved = await element.getElement();
+    return await resolved.execute((el) => el.innerHTML);
+}
+
+/** Returns `page`, switching a WebDriver Classic session back to it first. */
+export async function getTopDocument(
+    browser: WebdriverIO.Browser,
+    page: WebdriverIO.BrowsingContext,
+): Promise<WebdriverIO.BrowsingContext> {
+    if (!browser.isBidi) {
+        await browser.switchFrame(null);
+    }
+    return page;
 }
 
 /** Test set-up for JS API testing. */
@@ -231,7 +280,7 @@ export async function closeAllModals(
     browser: WebdriverIO.Browser,
     player: WebdriverIO.Element,
 ) {
-    const modals = await player.$$(".modal:not(.hidden)");
+    const modals = Array.from(await player.$$(".modal:not(.hidden)"));
     await browser.execute((modals) => {
         for (const m of modals) {
             const cl = m.querySelector(".close-modal")! as HTMLElement;

@@ -6,6 +6,7 @@ use crate::display_object::{
     Avm1Button, Avm2Button, BitmapClass, EditText, Graphic, MorphShape, MovieClip, Text, Video,
 };
 use crate::font::Font;
+use crate::tag_utils::SwfSlice;
 use gc_arena::barrier::unlock;
 use gc_arena::lock::Lock;
 use gc_arena::{Collect, Gc, Mutation};
@@ -88,15 +89,35 @@ impl<'gc> BitmapCharacter<'gc> {
 #[derive(Clone, Debug)]
 pub enum CompressedBitmap {
     Jpeg {
-        data: Vec<u8>,
-        alpha: Option<Vec<u8>>,
+        data: SwfSlice,
+        alpha: Option<SwfSlice>,
+        // Ideally we'd fetch the jpeg tables from the movie library instead of storing
+        // them here, but this wouldn't be very practical.
+        jpeg_tables: Option<SwfSlice>,
         width: u32,
         height: u32,
     },
-    Lossless(DefineBitsLossless<'static>),
+    Lossless(DefineBitsLossless<SwfSlice>),
 }
 
 impl CompressedBitmap {
+    pub fn from_jpeg(
+        data: SwfSlice,
+        alpha: Option<SwfSlice>,
+        jpeg_tables: Option<SwfSlice>,
+    ) -> Result<Self, RenderError> {
+        // No need to append JPEG tables here.
+        let (width, height) =
+            ruffle_render::utils::decode_define_bits_jpeg_dimensions(data.as_ref())?;
+        Ok(CompressedBitmap::Jpeg {
+            data,
+            alpha,
+            jpeg_tables,
+            width,
+            height,
+        })
+    }
+
     pub fn size(&self) -> BitmapSize {
         match self {
             CompressedBitmap::Jpeg { width, height, .. } => BitmapSize {
@@ -109,14 +130,20 @@ impl CompressedBitmap {
             },
         }
     }
+
     pub fn decode(&self) -> Result<RenderBitmap<'static>, RenderError> {
         match self {
             CompressedBitmap::Jpeg {
                 data,
                 alpha,
+                jpeg_tables,
                 width: _,
                 height: _,
-            } => ruffle_render::utils::decode_define_bits_jpeg(data, alpha.as_deref()),
+            } => {
+                let alpha = alpha.as_ref().map(|a| a.as_ref());
+                let jpeg_tables = jpeg_tables.as_ref().map(|t| t.as_ref());
+                ruffle_render::utils::decode_define_bits_jpeg(data.as_ref(), alpha, jpeg_tables)
+            }
             CompressedBitmap::Lossless(define_bits_lossless) => {
                 ruffle_render::utils::decode_define_bits_lossless(define_bits_lossless)
             }

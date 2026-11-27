@@ -46,14 +46,25 @@ pub fn determine_jpeg_tag_format(data: &[u8]) -> JpegTagFormat {
 pub fn decode_define_bits_jpeg(
     data: &[u8],
     alpha_data: Option<&[u8]>,
+    jpeg_tables: Option<&[u8]>,
 ) -> Result<Bitmap<'static>, Error> {
     let format = determine_jpeg_tag_format(data);
-    if format != JpegTagFormat::Jpeg && alpha_data.is_some() {
-        // Only DefineBitsJPEG3 with true JPEG data should have separate alpha data.
-        tracing::warn!("DefineBitsJPEG contains non-JPEG data with alpha; probably incorrect")
+    if format != JpegTagFormat::Jpeg {
+        if alpha_data.is_some() {
+            // Only DefineBitsJPEG3 with true JPEG data should have separate alpha data.
+            tracing::warn!("DefineBitsJPEG contains non-JPEG data with alpha; probably incorrect");
+        }
+
+        if jpeg_tables.is_some() {
+            // Only DefineBits (which can only hold JPEG data) should have separate JPEG tables.
+            tracing::warn!(
+                "DefineBitsJPEG contains non-JPEG data with separate JPEG tables; probably incorrect"
+            );
+        }
     }
+
     match format {
-        JpegTagFormat::Jpeg => decode_jpeg(data, alpha_data),
+        JpegTagFormat::Jpeg => decode_jpeg(data, alpha_data, jpeg_tables),
         JpegTagFormat::JpegXr => decode_jpegxr(data),
         JpegTagFormat::Png => decode_png(data),
         JpegTagFormat::Gif => decode_gif(data),
@@ -74,10 +85,7 @@ pub fn decode_define_bits_jpeg_dimensions(data: &[u8]) -> Result<(u32, u32), Err
 
 /// Glues the JPEG encoding tables from a JPEGTables SWF tag to the JPEG data
 /// in a DefineBits tag, producing complete JPEG data suitable for a decoder.
-pub fn glue_tables_to_jpeg<'a>(
-    jpeg_data: &'a [u8],
-    jpeg_tables: Option<&'a [u8]>,
-) -> Cow<'a, [u8]> {
+fn glue_tables_to_jpeg<'a>(jpeg_data: &'a [u8], jpeg_tables: Option<&'a [u8]>) -> Cow<'a, [u8]> {
     if let Some(jpeg_tables) = jpeg_tables
         && jpeg_tables.len() >= 2
     {
@@ -101,7 +109,7 @@ pub fn glue_tables_to_jpeg<'a>(
 
 /// Removes potential invalid JPEG data from SWF DefineBitsJPEG tags.
 /// These bytes need to be removed for the JPEG to decode properly.
-pub fn remove_invalid_jpeg_data(data: &[u8]) -> Cow<'_, [u8]> {
+fn remove_invalid_jpeg_data(data: &[u8]) -> Cow<'_, [u8]> {
     // SWF19 errata p.138:
     // "Before version 8 of the SWF file format, SWF files could contain an erroneous header of 0xFF, 0xD9, 0xFF, 0xD8
     // before the JPEG SOI marker."
@@ -197,10 +205,15 @@ fn decode_jpeg_dimensions(jpeg_data: &[u8]) -> Result<(u16, u16), Error> {
     Ok((width, height))
 }
 
-/// Decodes a JPEG with optional alpha data.
+/// Decodes a JPEG with optional alpha data and optional external tables.
 /// The decoded bitmap will have pre-multiplied alpha.
-fn decode_jpeg(jpeg_data: &[u8], alpha_data: Option<&[u8]>) -> Result<Bitmap<'static>, Error> {
-    let jpeg_data = remove_invalid_jpeg_data(jpeg_data);
+fn decode_jpeg(
+    jpeg_data: &[u8],
+    alpha_data: Option<&[u8]>,
+    jpeg_tables: Option<&[u8]>,
+) -> Result<Bitmap<'static>, Error> {
+    let jpeg_data = glue_tables_to_jpeg(jpeg_data, jpeg_tables);
+    let jpeg_data = remove_invalid_jpeg_data(&jpeg_data);
     let (mut decoder, width, height) = read_jpeg_headers(&jpeg_data)?;
     let decoded_data = decoder.decode()?;
 
@@ -252,12 +265,12 @@ fn decode_jpeg(jpeg_data: &[u8], alpha_data: Option<&[u8]>) -> Result<Bitmap<'st
 /// DefineBitsLossless is Zlib encoded pixel data (similar to PNG), possibly
 /// palletized.
 pub fn decode_define_bits_lossless(
-    swf_tag: &swf::DefineBitsLossless,
+    swf_tag: &swf::DefineBitsLossless<impl AsRef<[u8]>>,
 ) -> Result<Bitmap<'static>, Error> {
     validate_size(swf_tag.width.into(), swf_tag.height.into())?;
 
     // Decompress the image data (DEFLATE compression).
-    let mut decoded_data = decompress_zlib(&swf_tag.data)?;
+    let mut decoded_data = decompress_zlib(swf_tag.data.as_ref())?;
 
     let has_alpha = swf_tag.version == 2;
 
@@ -546,4 +559,70 @@ fn decompress_zlib(data: &[u8]) -> Result<Vec<u8>, Error> {
         .map_err(Error::InvalidZlibCompression)?;
     out_data.shrink_to_fit();
     Ok(out_data)
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    // A 1x1 JPEG with a single orange pixel
+    #[rustfmt::skip]
+    const JPEG_BYTES: &[u8] = &[
+        0xff, 0xd8,             // Start of Image
+        0xff, 0xc0, 0x00, 0x11, // Start-of-Frame
+            0x08, 0x00, 0x01, 0x00, 0x01, 0x03, 0x01, 0x11, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01,
+        0xff, 0xc4, 0x00, 0x14, // Define Huffman Tables
+            0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06,
+        0xff, 0xc4, 0x00, 0x14, // Define Huffman Tables
+            0x10, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0xff, 0xc4, 0x00, 0x14, // Define Huffman Tables
+            0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08,
+        0xff, 0xc4, 0x00, 0x14, // Define Huffman Tables
+            0x11, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0xff, 0xda, 0x00, 0x0c, // Start Of Scan
+            0x03, 0x01, 0x00, 0x02, 0x11, 0x03, 0x11, 0x00, 0x3f, 0x00, 0x7a, 0x0e, 0x18, 0xaf,
+        0xff, 0xd9,             // End of Image
+    ];
+
+    #[rustfmt::skip]
+    const JPEG_TABLES_BYTES: &[u8] = &[
+        0xff, 0xd8,             // Start of Image
+        0xff, 0xdb, 0x00, 0x43, // Define Quantization Tables
+            0x00, 0x03, 0x02, 0x02, 0x03, 0x02, 0x02, 0x03, 0x03, 0x03, 0x03, 0x04, 0x03, 0x03, 0x04, 0x05, 0x08, 0x05,
+            0x05, 0x04, 0x04, 0x05, 0x0a, 0x07, 0x07, 0x06, 0x08, 0x0c, 0x0a, 0x0c, 0x0c, 0x0b, 0x0a, 0x0b, 0x0b, 0x0d,
+            0x0e, 0x12, 0x10, 0x0d, 0x0e, 0x11, 0x0e, 0x0b, 0x0b, 0x10, 0x16, 0x10, 0x11, 0x13, 0x14, 0x15, 0x15, 0x15,
+            0x0c, 0x0f, 0x17, 0x18, 0x16, 0x14, 0x18, 0x12, 0x14, 0x15, 0x14,
+        0xff, 0xdb, 0x00, 0x43, // Define Quantization Tables
+            0x01, 0x03, 0x04, 0x04, 0x05, 0x04, 0x05, 0x09, 0x05, 0x05, 0x09, 0x14, 0x0d, 0x0b, 0x0d, 0x14, 0x14, 0x14,
+            0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14,
+            0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14,
+            0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14,
+        0xff, 0xd9,             // End of Image
+    ];
+
+    #[test]
+    fn decode_jpeg_with_tables() {
+        let (width, height) = decode_define_bits_jpeg_dimensions(JPEG_BYTES).unwrap();
+        assert_eq!((width, height), (1, 1));
+        let bitmap = decode_define_bits_jpeg(
+            JPEG_BYTES,
+            None, /* no alpha */
+            Some(JPEG_TABLES_BYTES),
+        )
+        .unwrap();
+        assert_eq!((bitmap.width(), bitmap.height()), (1, 1));
+        assert_eq!(bitmap.format(), BitmapFormat::Rgb);
+        assert_eq!(bitmap.data(), &[255, 127, 0]);
+
+        let mut concat = JPEG_TABLES_BYTES.to_vec();
+        concat.extend_from_slice(JPEG_BYTES);
+
+        let (width, height) = decode_define_bits_jpeg_dimensions(&concat).unwrap();
+        assert_eq!((width, height), (1, 1));
+        let bitmap = decode_define_bits_jpeg(&concat, None, None).unwrap();
+        assert_eq!((bitmap.width(), bitmap.height()), (1, 1));
+        assert_eq!(bitmap.format(), BitmapFormat::Rgb);
+        assert_eq!(bitmap.data(), &[255, 127, 0]);
+    }
 }

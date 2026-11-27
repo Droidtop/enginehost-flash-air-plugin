@@ -51,7 +51,6 @@ use ruffle_common::utils::HasPrefixField;
 use ruffle_macros::istr;
 use ruffle_render::perspective_projection::PerspectiveProjection;
 use smallvec::SmallVec;
-use std::borrow::Cow;
 use std::cell::{Cell, OnceCell, Ref, RefCell, RefMut};
 use std::cmp::max;
 use std::collections::HashMap;
@@ -3521,7 +3520,7 @@ impl<'gc, 'a> MovieClipShared<'gc> {
                 width: define_bits_lossless.width,
                 height: define_bits_lossless.height,
                 version: define_bits_lossless.version,
-                data: Cow::Owned(define_bits_lossless.data.into_owned()),
+                data: self.swf_data.to_subslice(define_bits_lossless.data),
             })),
         );
         self.library_mut(context)
@@ -3639,19 +3638,9 @@ impl<'gc, 'a> MovieClipShared<'gc> {
         let mc = context.gc();
         let library = self.library_mut(context);
         let (id, jpeg_data) = reader.read_define_bits()?;
-        let jpeg_tables = library.jpeg_tables();
-        let jpeg_data =
-            ruffle_render::utils::glue_tables_to_jpeg(jpeg_data, jpeg_tables).into_owned();
-        let (width, height) = ruffle_render::utils::decode_define_bits_jpeg_dimensions(&jpeg_data)?;
-        let bitmap = Character::Bitmap(Gc::new(
-            mc,
-            BitmapCharacter::new(CompressedBitmap::Jpeg {
-                data: jpeg_data,
-                alpha: None,
-                width,
-                height,
-            }),
-        ));
+        let jpeg_data = self.swf_data.to_subslice(jpeg_data);
+        let compressed = CompressedBitmap::from_jpeg(jpeg_data, None, library.jpeg_tables())?;
+        let bitmap = Character::Bitmap(Gc::new(mc, BitmapCharacter::new(compressed)));
         library.register_character(id, bitmap);
         Ok(())
     }
@@ -3663,16 +3652,10 @@ impl<'gc, 'a> MovieClipShared<'gc> {
         reader: &mut SwfStream<'a>,
     ) -> Result<(), Error> {
         let (id, jpeg_data) = reader.read_define_bits_jpeg_2()?;
-        let (width, height) = ruffle_render::utils::decode_define_bits_jpeg_dimensions(jpeg_data)?;
-        let bitmap = Character::Bitmap(Gc::new(
-            context.gc(),
-            BitmapCharacter::new(CompressedBitmap::Jpeg {
-                data: jpeg_data.to_owned(),
-                alpha: None,
-                width,
-                height,
-            }),
-        ));
+        let jpeg_data = self.swf_data.to_subslice(jpeg_data);
+        let compressed = CompressedBitmap::from_jpeg(jpeg_data, None, None)?;
+        let mc = context.gc();
+        let bitmap = Character::Bitmap(Gc::new(mc, BitmapCharacter::new(compressed)));
         self.library_mut(context).register_character(id, bitmap);
         Ok(())
     }
@@ -3685,17 +3668,11 @@ impl<'gc, 'a> MovieClipShared<'gc> {
         version: u8,
     ) -> Result<(), Error> {
         let jpeg = reader.read_define_bits_jpeg_3(version)?;
-        let (width, height) = ruffle_render::utils::decode_define_bits_jpeg_dimensions(jpeg.data)?;
-
-        let bitmap = Character::Bitmap(Gc::new(
-            context.gc(),
-            BitmapCharacter::new(CompressedBitmap::Jpeg {
-                data: jpeg.data.to_owned(),
-                alpha: Some(jpeg.alpha_data.to_owned()),
-                width,
-                height,
-            }),
-        ));
+        let jpeg_data = self.swf_data.to_subslice(jpeg.data);
+        let alpha_data = self.swf_data.to_subslice(jpeg.alpha_data);
+        let compressed = CompressedBitmap::from_jpeg(jpeg_data, Some(alpha_data), None)?;
+        let mc = context.gc();
+        let bitmap = Character::Bitmap(Gc::new(mc, BitmapCharacter::new(compressed)));
         self.library_mut(context)
             .register_character(jpeg.id, bitmap);
         Ok(())
@@ -4225,7 +4202,7 @@ impl<'gc, 'a> MovieClipShared<'gc> {
         context: &mut UpdateContext<'gc>,
         reader: &mut SwfStream<'a>,
     ) -> Result<(), Error> {
-        let jpeg_data = reader.read_slice_to_end();
+        let jpeg_data = self.swf_data.to_subslice(reader.read_slice_to_end());
         self.library_mut(context).set_jpeg_tables(jpeg_data);
         Ok(())
     }
