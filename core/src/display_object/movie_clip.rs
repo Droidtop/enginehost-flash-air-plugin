@@ -944,10 +944,12 @@ impl<'gc> MovieClip<'gc> {
 
                 self.0.queued_goto.set(Some(goto_info));
 
-                // If we have a frame script on that frame, add ourselves to the
-                // frame script cleanup queue so that that frame script is
-                // correctly run.
-                if self.has_frame_script(goto_info.frame) {
+                // In SWFv9, the goto doesn't run a nested frame, so if we have
+                // a frame script on that frame, add ourselves to the frame
+                // script cleanup queue so that that frame script is correctly
+                // run. On later versions, the nested frame runs it, and it
+                // clears the queue before that anyway.
+                if self.swf_version() <= 9 && self.has_frame_script(goto_info.frame) {
                     context.frame_script_cleanup_queue.push_back(self);
                 }
             }
@@ -5078,9 +5080,9 @@ pub struct ClipEventHandler {
 
 impl ClipEventHandler {
     /// Build an event handler from a SWF movie and a parsed ClipAction.
-    pub fn new<'gc>(
-        swf_action: swf::ClipAction<'_>,
-        movie: SwfMovie<'gc>,
+    pub fn new(
+        swf_action: swf::ClipAction,
+        movie: SwfMovie,
         all_event_flags: ClipEventFlag,
     ) -> Self {
         let declared_events = swf_action.events;

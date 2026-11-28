@@ -138,8 +138,12 @@ pub fn run_inner_goto_frame<'gc>(
     let old_phase = *context.frame_phase;
 
     // When performing goto, frame scripts behave the same as when entering a new frame
-    // so no separate cleanup is performed on ones registered during frame script phase
-    context.frame_script_cleanup_queue.clear();
+    // so no separate cleanup is performed on ones registered during frame script phase.
+    // Instead, the nested frame runs them, even if a script was replaced after it
+    // already ran on this frame.
+    for clip in std::mem::take(&mut context.frame_script_cleanup_queue) {
+        clip.set_last_queued_script_frame(None);
+    }
 
     // Note - we do *not* call `enter_frame` or dispatch an `enterFrame` event
 
@@ -174,21 +178,21 @@ pub fn run_inner_goto_frame<'gc>(
 }
 
 /// Broadcast a `enterFrame` event to all `DisplayObject`s.
-pub fn broadcast_frame_entered<'gc>(context: &mut UpdateContext<'gc>) {
+pub fn broadcast_frame_entered(context: &mut UpdateContext) {
     let enter_frame_evt = EventObject::bare_default_event(context, "enterFrame");
     let dobject_constr = context.avm2.classes().display_object;
     Avm2::broadcast_event(context, enter_frame_evt, dobject_constr);
 }
 
 /// Broadcast a `frameConstructed` event to all `DisplayObject`s.
-pub fn broadcast_frame_constructed<'gc>(context: &mut UpdateContext<'gc>) {
+pub fn broadcast_frame_constructed(context: &mut UpdateContext) {
     let frame_constructed_evt = EventObject::bare_default_event(context, "frameConstructed");
     let dobject_constr = context.avm2.classes().display_object;
     Avm2::broadcast_event(context, frame_constructed_evt, dobject_constr);
 }
 
 /// Broadcast a `exitFrame` event to all `DisplayObject`s.
-pub fn broadcast_frame_exited<'gc>(context: &mut UpdateContext<'gc>) {
+pub fn broadcast_frame_exited(context: &mut UpdateContext) {
     let exit_frame_evt = EventObject::bare_default_event(context, "exitFrame");
     let dobject_constr = context.avm2.classes().display_object;
     Avm2::broadcast_event(context, exit_frame_evt, dobject_constr);
@@ -198,7 +202,7 @@ pub fn broadcast_frame_exited<'gc>(context: &mut UpdateContext<'gc>) {
 
 /// Empty the `context.frame_script_cleanup_queue` by running frame scripts for
 /// each clip in the queue.
-fn run_frame_script_cleanup<'gc>(context: &mut UpdateContext<'gc>) {
+fn run_frame_script_cleanup(context: &mut UpdateContext) {
     while let Some(clip) = context.frame_script_cleanup_queue.pop_front() {
         clip.set_has_pending_script(true);
         clip.set_last_queued_script_frame(None);

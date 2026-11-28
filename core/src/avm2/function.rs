@@ -188,7 +188,7 @@ pub struct FunctionArgsIter<'a, 'gc> {
     back: usize,
 }
 
-impl<'a, 'gc> Iterator for FunctionArgsIter<'a, 'gc> {
+impl<'gc> Iterator for FunctionArgsIter<'_, 'gc> {
     type Item = Value<'gc>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -206,7 +206,7 @@ impl<'a, 'gc> Iterator for FunctionArgsIter<'a, 'gc> {
     }
 }
 
-impl<'a, 'gc> DoubleEndedIterator for FunctionArgsIter<'a, 'gc> {
+impl DoubleEndedIterator for FunctionArgsIter<'_, '_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.next >= self.back {
             None
@@ -378,14 +378,14 @@ impl fmt::Debug for BoundMethod<'_> {
     }
 }
 
-pub fn display_function<'gc>(output: &mut WString, method: Method<'gc>) {
+pub fn display_function(output: &mut WString, method: Method) {
     let bound_class = method.bound_class();
 
     if let Some(bound_class) = bound_class {
         // Only classes in public namespaces are printed with their namespace;
         // internal and private classes are printed with just their local name.
         let name = bound_class.name();
-        if name.namespace().is_namespace() {
+        if name.namespace().is_public() {
             output.push_str(&name.to_qualified_name_no_mc());
         } else {
             output.push_str(&name.local_name());
@@ -419,7 +419,7 @@ pub fn display_function<'gc>(output: &mut WString, method: Method<'gc>) {
                     TraitKind::Getter { .. } => output.push_utf8("get "),
                     _ => (),
                 }
-                if method_trait.name().namespace().is_namespace() {
+                if method_trait.name().namespace().is_public() {
                     output.push_str(&method_trait.name().to_qualified_name_no_mc());
                 } else {
                     output.push_str(&method_trait.name().local_name());
